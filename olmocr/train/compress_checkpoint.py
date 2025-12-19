@@ -38,6 +38,7 @@ from transformers import (
     AutoTokenizer,
     Qwen2_5_VLForConditionalGeneration,
     Qwen2VLForConditionalGeneration,
+    Qwen3VLForConditionalGeneration,
 )
 
 from olmocr.pipeline import build_page_query
@@ -81,6 +82,8 @@ def get_calibration_pdfs(num_samples: int, pdf_paths: List[str]) -> List[str]:
 async def prepare_calibration_dataset(pdf_paths: List[str], processor) -> Dataset:
     """Prepare calibration dataset from PDFs using build_page_query."""
     dataset_items = []
+    tokenizer_max_length = getattr(getattr(processor, "tokenizer", None), "model_max_length", 8192) or 8192
+    calibration_max_length = min(8192, int(tokenizer_max_length))
 
     for pdf_path in pdf_paths:
         # Get first page of each PDF (page 0)
@@ -112,7 +115,7 @@ async def prepare_calibration_dataset(pdf_paths: List[str], processor) -> Datase
             text=[text],
             images=images if images else None,
             padding=False,
-            max_length=8192,
+            max_length=calibration_max_length,
             truncation=True,
         )
 
@@ -190,7 +193,11 @@ def upload_local_to_s3(local_dir: str, bucket: str, prefix: str) -> None:
 
 def load_model_and_tokenizer(
     source_path: str,
-) -> Tuple[Union[Qwen2VLForConditionalGeneration, Qwen2_5_VLForConditionalGeneration], AutoTokenizer, Optional[str]]:
+) -> Tuple[
+    Union[Qwen2VLForConditionalGeneration, Qwen2_5_VLForConditionalGeneration, Qwen3VLForConditionalGeneration],
+    AutoTokenizer,
+    Optional[str],
+]:
     """Load model and tokenizer from source path (local or S3)."""
     if is_s3_path(source_path):
         # Download from S3 to temporary directory
@@ -209,25 +216,34 @@ def load_model_and_tokenizer(
 
     # Get model name from config
     model_name = config.get("name_or_path", "")
+    model_name_lower = model_name.lower()
 
     print(f"Loading model from {model_path}...")
 
     # Load appropriate model class based on name
-    if "Qwen2.5-VL" in model_name:
+    if "chandra" in model_name_lower or "qwen3" in model_name_lower:
+        print("Detected Qwen3-VL model")
+        model = Qwen3VLForConditionalGeneration.from_pretrained(model_path, device_map="auto", torch_dtype="auto")
+    elif "qwen2.5-vl" in model_name_lower:
         print("Detected Qwen2.5-VL model")
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_path, device_map="auto", torch_dtype="auto")
-    elif "Qwen2-VL" in model_name:
+    elif "qwen2-vl" in model_name_lower:
         print("Detected Qwen2-VL model")
         model = Qwen2VLForConditionalGeneration.from_pretrained(model_path, device_map="auto", torch_dtype="auto")
     else:
         # Default to checking architectures list
         architectures = config.get("architectures", [])
-        if "Qwen2_5_VLForConditionalGeneration" in architectures:
+        if "Qwen3VLForConditionalGeneration" in architectures:
+            print("Detected Qwen3-VL model from architectures")
+            model = Qwen3VLForConditionalGeneration.from_pretrained(model_path, device_map="auto", torch_dtype="auto")
+        elif "Qwen2_5_VLForConditionalGeneration" in architectures:
             print("Detected Qwen2.5-VL model from architectures")
             model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_path, device_map="auto", torch_dtype="auto")
-        else:
+        elif "Qwen2VLForConditionalGeneration" in architectures:
             print("Detected Qwen2-VL model from architectures")
             model = Qwen2VLForConditionalGeneration.from_pretrained(model_path, device_map="auto", torch_dtype="auto")
+        else:
+            raise ValueError(f"Unsupported architecture(s) in config: {architectures}")
 
     print(f"Loading tokenizer from {model_path}...")
     tokenizer = AutoTokenizer.from_pretrained(model_path)

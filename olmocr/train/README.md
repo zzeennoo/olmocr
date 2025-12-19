@@ -93,6 +93,7 @@ You may need to adjust the paths in the dataset section of the config to match w
 #### Finetuning Configs
 If you would like to finetune on a smaller amount of local data, with a LoRA adapter, try the following
 - Basic finetuning config: [qwen25_vl_olmocrv4_finetuning.yaml](/olmocr/train/configs/v0.4.0/qwen25_vl_olmocrv4_finetuning.yaml)
+- Chandra/Qwen3 finetuning config: [chandra_vl_finetuning.yaml](/olmocr/train/configs/v0.4.0/chandra_vl_finetuning.yaml)
 
 You'll still need to adjust your paths accordingly.
 

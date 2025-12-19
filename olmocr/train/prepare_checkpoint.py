@@ -48,6 +48,7 @@ from transformers import (
     AutoConfig,
     Qwen2_5_VLForConditionalGeneration,
     Qwen2VLForConditionalGeneration,
+    Qwen3VLForConditionalGeneration,
 )
 
 try:
@@ -58,18 +59,23 @@ except ImportError:
 from olmocr.s3_utils import parse_s3_path
 
 # Hugging Face model IDs for tokenizer files
-HF_MODEL_IDS = {"Qwen2VLForConditionalGeneration": "Qwen/Qwen2-VL-7B-Instruct", "Qwen2_5_VLForConditionalGeneration": "Qwen/Qwen2.5-VL-7B-Instruct"}
+HF_MODEL_IDS = {
+    "Qwen2VLForConditionalGeneration": "Qwen/Qwen2-VL-7B-Instruct",
+    "Qwen2_5_VLForConditionalGeneration": "Qwen/Qwen2.5-VL-7B-Instruct",
+    "Qwen3VLForConditionalGeneration": "datalab-to/chandra",
+}
 
 # Required tokenizer files to download from Hugging Face
 TOKENIZER_FILES = ["chat_template.json", "merges.txt", "preprocessor_config.json", "tokenizer.json", "tokenizer_config.json", "vocab.json"]
 
 # Supported model architectures
-SUPPORTED_ARCHITECTURES = ["Qwen2VLForConditionalGeneration", "Qwen2_5_VLForConditionalGeneration"]
+SUPPORTED_ARCHITECTURES = ["Qwen2VLForConditionalGeneration", "Qwen2_5_VLForConditionalGeneration", "Qwen3VLForConditionalGeneration"]
 
 # Map architectures to corresponding model classes
 MODEL_CLASS_MAP = {
     "Qwen2VLForConditionalGeneration": Qwen2VLForConditionalGeneration,
     "Qwen2_5_VLForConditionalGeneration": Qwen2_5_VLForConditionalGeneration,
+    "Qwen3VLForConditionalGeneration": Qwen3VLForConditionalGeneration,
 }
 
 # Files to exclude from copying (training-related files)
@@ -163,9 +169,12 @@ def detect_checkpoint_architecture(config_path: str) -> str:
     if not detected_architecture:
         # Try to detect from model name
         model_name = config_data.get("name_or_path", "")
-        if "Qwen2.5-VL" in model_name:
+        model_name_lower = model_name.lower()
+        if "chandra" in model_name_lower or "qwen3" in model_name_lower:
+            detected_architecture = "Qwen3VLForConditionalGeneration"
+        elif "qwen2.5-vl" in model_name_lower:
             detected_architecture = "Qwen2_5_VLForConditionalGeneration"
-        elif "Qwen2-VL" in model_name:
+        elif "qwen2-vl" in model_name_lower:
             detected_architecture = "Qwen2VLForConditionalGeneration"
         else:
             raise ValueError(f"No supported architecture found. Expected one of {SUPPORTED_ARCHITECTURES} " f"but found: {architectures}")

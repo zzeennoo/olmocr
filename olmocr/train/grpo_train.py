@@ -24,6 +24,7 @@ from transformers import (
     AutoProcessor,
     Qwen2_5_VLForConditionalGeneration,
     Qwen2VLForConditionalGeneration,
+    Qwen3VLForConditionalGeneration,
 )
 from trl import GRPOConfig, GRPOTrainer
 
@@ -892,7 +893,10 @@ def main():
 
     # Load model
     logger.info(f"Loading model: {args.model_name}")
-    if "Qwen2-VL" in args.model_name:
+    model_name_lower = args.model_name.lower()
+    if "qwen3" in model_name_lower or "chandra" in model_name_lower:
+        model_class = Qwen3VLForConditionalGeneration
+    elif "qwen2-vl" in model_name_lower:
         model_class = Qwen2VLForConditionalGeneration
     else:
         model_class = Qwen2_5_VLForConditionalGeneration

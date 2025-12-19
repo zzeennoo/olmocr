@@ -1,0 +1,94 @@
+# Example configuration for finetuning Chandra (Qwen3-VL based)
+
+project_name: olmocr-chandra-finetuning
+run_name: chandra_vl_finetune_demo
+
+model:
+  name: datalab-to/chandra
+  trust_remote_code: false
+  torch_dtype: bfloat16
+  use_flash_attention: true
+  attn_implementation: flash_attention_2
+
+  # Enable LoRA for parameter-efficient finetuning
+  use_lora: true
+  lora_rank: 8
+  lora_alpha: 32
+  lora_dropout: 0.1
+  lora_target_modules:
+    - q_proj
+    - v_proj
+    - k_proj
+    - o_proj
+
+# Dataset configuration
+# Replace the root_dir values with your prepared single-page PDF/markdown pairs
+# (see olmocr/train/README.md for data preparation guidance)
+dataset:
+  train:
+    - name: finetune_chandra_train
+      root_dir: /path/to/train-data
+      pipeline: &basic_pipeline
+        - name: FrontMatterParser
+          front_matter_class: PageResponse
+        - name: FilterOutRotatedDocuments
+        - name: ReformatLatexBoldItalic
+        - name: DatasetTextRuleFilter
+        - name: PDFRenderer
+          target_longest_image_dim: 1288
+        - name: RotationAugmentation
+          probability: 0.02
+        - name: NewYamlFinetuningPromptWithNoAnchoring
+        - name: FrontMatterOutputFormat
+        - name: InstructUserMessages
+          prompt_first: true
+        - name: Tokenizer
+          masking_index: -100
+          end_of_message_token: "<|im_end|>"
+
+  eval:
+    - name: finetune_chandra_eval
+      root_dir: /path/to/eval-data
+      pipeline: *basic_pipeline
+
+training:
+  output_dir: /path/to/output
+  num_train_epochs: 1
+
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 32
+
+  gradient_checkpointing: false
+
+  # Limit total sequence length for stability on Qwen3-VL checkpoints
+  collator_max_token_len: 4096
+
+  learning_rate: 2e-5
+  lr_scheduler_type: linear
+  warmup_ratio: 0.1
+
+  optim: adamw_torch
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+
+  torch_compile: false
+  torch_compile_backend: inductor
+  torch_compile_mode: default
+  torch_compile_fullgraph: false
+  torch_compile_dynamic: false
+
+  seed: 300
+  data_seed: 301
+
+  evaluation_strategy: steps
+  eval_steps: 500
+  save_strategy: steps
+  save_steps: 500
+  save_total_limit: 5
+  load_best_model_at_end: false
+  metric_for_best_model: eval_finetune_chandra_eval_loss
+  greater_is_better: false
+
+  report_to:
+    - wandb

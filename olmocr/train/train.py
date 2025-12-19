@@ -20,6 +20,7 @@ from transformers import (
     AutoProcessor,
     Qwen2_5_VLForConditionalGeneration,
     Qwen2VLForConditionalGeneration,
+    Qwen3VLForConditionalGeneration,
     get_scheduler,
 )
 
@@ -331,14 +332,18 @@ def main():
 
     # Load model
     logger.info(f"Loading model: {config.model.name}")
-    if "qwen2.5-vl" in config.model.name.lower() or "olmocr-2-7b-1025" in config.model.name.lower():
+    model_name_lower = config.model.name.lower()
+    if "chandra" in model_name_lower or "qwen3" in model_name_lower:
+        model_class = Qwen3VLForConditionalGeneration
+        model = model_class.from_pretrained(config.model.name, **model_init_kwargs)
+    elif "qwen2.5-vl" in model_name_lower or "olmocr-2-7b-1025" in model_name_lower:
         model_class = Qwen2_5_VLForConditionalGeneration
         model = model_class.from_pretrained(config.model.name, **model_init_kwargs)
-    elif "qwen2-vl" in config.model.name.lower():
+    elif "qwen2-vl" in model_name_lower:
         model_class = Qwen2VLForConditionalGeneration
         model = model_class.from_pretrained(config.model.name, **model_init_kwargs)
     else:
-        raise NotImplementedError()
+        raise NotImplementedError(f"Unsupported model architecture for {config.model.name}")
 
     if config.model.use_lora:
         logger.info("Applying LoRA adapters as specified in the config.")
