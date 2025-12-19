@@ -10,7 +10,8 @@ Then, add in some extra training requirements:
 
 ```bash
 pip install .[train]
-pip install transformers==4.52.4
+# Qwen3-VL / Chandra requires transformers >=4.57; 4.57.3 is the repo default
+pip install transformers==4.57.3
 pip install flash-attn>=2.8.0.post2 --no-build-isolation
 ```
 

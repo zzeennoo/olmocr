@@ -26,6 +26,7 @@ from typing import (
 )
 
 import numpy as np
+import torch
 import yaml
 from PIL import Image
 from pypdf import PdfReader
@@ -1195,39 +1196,36 @@ class Tokenizer(PipelineStep):
 
         assert main_image is not None
 
-        # Process inputs using processor
+        # Process inputs using processor (torch tensors for broader model compatibility)
         inputs = self.processor(
             text=[text],
             images=[main_image],
             padding=True,
-            return_tensors="np",
+            return_tensors="pt",
         )
 
-        # Get labels by tokenizing the output text
-        labels = self.processor(text=[response], padding=True, return_tensors="np")
+        # Tokenize response
+        labels = self.processor(text=[response], padding=True, return_tensors="pt")
 
         # Append end-of-message token to the labels
         end_tokens = self.processor.tokenizer(self.end_of_message_token, add_special_tokens=False)["input_ids"]
-        end_tokens = np.array(end_tokens, dtype=inputs.input_ids.dtype)
+        end_tokens = torch.tensor(end_tokens, dtype=inputs.input_ids.dtype)
 
-        # Handle the case where labels['input_ids'] is empty
-        if labels["input_ids"].shape[1] == 0:
-            labels_input_ids_0 = np.array([], dtype=inputs.input_ids.dtype)
-        else:
-            labels_input_ids_0 = labels["input_ids"][0].astype(inputs.input_ids.dtype)
+        labels_input_ids_0 = labels["input_ids"][0]
+        if labels_input_ids_0.numel() == 0:
+            labels_input_ids_0 = torch.tensor([], dtype=inputs.input_ids.dtype)
 
-        labels["input_ids"] = np.concatenate([labels_input_ids_0, end_tokens])
-        labels["input_ids"] = np.expand_dims(labels["input_ids"], axis=0)
+        labels_input_ids = torch.cat([labels_input_ids_0, end_tokens], dim=0)
 
         # Concatenate input_ids and labels
-        input_ids = np.concatenate([inputs.input_ids[0], labels.input_ids[0]], axis=0)
+        input_ids = torch.cat([inputs.input_ids[0], labels_input_ids], dim=0)
 
-        # All columns will participate in attention fully
-        attention_mask = np.ones_like(input_ids)
+        # Attention mask
+        attention_mask = torch.ones_like(input_ids)
 
-        # Create labels, masking the input portion with -100
-        labels_full = np.full_like(input_ids, fill_value=self.masking_index)
-        labels_full[len(inputs.input_ids[0]) :] = labels.input_ids[0]
+        # Labels with masking for the prompt portion
+        labels_full = torch.full_like(input_ids, fill_value=self.masking_index)
+        labels_full[len(inputs.input_ids[0]) :] = labels_input_ids
 
         # Return as dict, including pixel_values
         sample["input_ids"] = input_ids
@@ -1254,27 +1252,48 @@ class RandomTokenFlipper(PipelineStep):
         if "labels" not in sample or "input_ids" not in sample:
             return sample
 
-        # Work with copies to avoid modifying original arrays
-        labels = sample["labels"].copy()
-        input_ids = sample["input_ids"].copy()
+        labels = sample["labels"]
+        input_ids = sample["input_ids"]
 
-        # Find indices where labels are not masked (i.e., output tokens)
-        non_masked_indices = np.where(labels != self.masking_index)[0]
+        # Torch path
+        if isinstance(labels, torch.Tensor) and isinstance(input_ids, torch.Tensor):
+            labels = labels.clone()
+            input_ids = input_ids.clone()
+            non_masked = labels != self.masking_index
+            if not torch.any(non_masked):
+                return sample
 
+            # Flip tokens with Bernoulli mask
+            flip_mask = torch.bernoulli(torch.full(labels.shape, self.token_flip_rate)).bool() & non_masked
+            if torch.any(flip_mask):
+                random_tokens = torch.tensor(
+                    np.random.choice(self.valid_token_ids, size=flip_mask.sum().item()),
+                    dtype=input_ids.dtype,
+                    device=input_ids.device,
+                )
+                input_ids[flip_mask] = random_tokens
+                labels[flip_mask] = self.masking_index
+
+            sample["input_ids"] = input_ids
+            sample["labels"] = labels
+            return sample
+
+        # NumPy path (fallback)
+        labels_np = labels.copy()
+        input_ids_np = input_ids.copy()
+
+        non_masked_indices = np.where(labels_np != self.masking_index)[0]
         if len(non_masked_indices) == 0:
             return sample
 
-        # For each non-masked token, independently decide whether to flip
         for idx in non_masked_indices:
             if np.random.random() < self.token_flip_rate:
-                # Pick a random token from the valid tokens list
                 random_token = np.random.choice(self.valid_token_ids)
-                input_ids[idx] = random_token
-                labels[idx] = self.masking_index
+                input_ids_np[idx] = random_token
+                labels_np[idx] = self.masking_index
 
-        # Update sample with modified arrays
-        sample["input_ids"] = input_ids
-        sample["labels"] = labels
+        sample["input_ids"] = input_ids_np
+        sample["labels"] = labels_np
 
         return sample
 
