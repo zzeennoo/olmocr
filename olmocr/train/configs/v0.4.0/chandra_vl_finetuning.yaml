@@ -38,7 +38,8 @@ dataset:
           target_longest_image_dim: 1288
         - name: RotationAugmentation
           probability: 0.02
-        - name: NewYamlFinetuningPromptWithNoAnchoring
+        - name: ChandraHTMLPrompt
+          use_layout: false
         - name: FrontMatterOutputFormat
         - name: InstructUserMessages
           prompt_first: true

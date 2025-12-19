@@ -63,6 +63,14 @@ class NewYamlFinetuningPromptWithNoAnchoringConfig(PipelineStepConfig):
 
 
 @dataclass
+class ChandraHTMLPromptConfig(PipelineStepConfig):
+    """Configuration for ChandraHTMLPrompt step."""
+
+    name: str = "ChandraHTMLPrompt"
+    use_layout: bool = False
+
+
+@dataclass
 class FrontMatterOutputFormatConfig(PipelineStepConfig):
     """Configuration for FrontMatterOutputFormat step."""
 
@@ -392,6 +400,7 @@ class Config:
             RotationAugmentation,
             StaticLengthDocumentAnchoring,
             Tokenizer,
+            ChandraHTMLPrompt,
         )
 
         steps = []
@@ -423,6 +432,9 @@ class Config:
 
             elif step_name == "NewYamlFinetuningPromptWithNoAnchoring":
                 steps.append(NewYamlFinetuningPromptWithNoAnchoring())
+
+            elif step_name == "ChandraHTMLPrompt":
+                steps.append(ChandraHTMLPrompt(use_layout=step_config.get("use_layout", False)))
 
             elif step_name == "JSONOutputFormat":
                 steps.append(JSONOutputFormat())
